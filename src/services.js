@@ -12,6 +12,7 @@ angular.module('oi.select')
             newItem:        false,
             closeList:      true,
             saveTrigger:    'enter tab blur',
+            appendToBody:   false,
             minlength:      0
         },
         version: {
@@ -82,10 +83,11 @@ angular.module('oi.select')
      * @param {element} inner input element
      * @returns {function} deregistration function for listeners.
      */
-    function bindFocusBlur(element, inputElement) {
+    function bindFocusBlur(element, inputElement, listElement) {
         var isFocused, isMousedown, isBlur;
 
         $document[0].addEventListener('click', clickHandler, true);
+        listElement[0].addEventListener('mousedown', mousedownHandler, true);
         element[0].addEventListener('mousedown', mousedownHandler, true);
         element[0].addEventListener('blur', blurHandler, true);
         inputElement.on('focus', focusHandler);
@@ -148,14 +150,15 @@ angular.module('oi.select')
         }
     }
 
-    /**
-     * Sets the selected item in the dropdown menu
-     * of available options.
-     *
-     * @param {object} list
-     * @param {object} item
-     */
-    function scrollActiveOption(list, item) {
+        /**
+         * Sets the selected item in the dropdown menu
+         * of available options.
+         *
+         * @param {object} list
+         * @param {object} item
+         * @param pos
+         */
+    function scrollActiveOption(list, item, pos) {
         var y, height_menu, height_item, scroll, scroll_top, scroll_bottom;
 
         if (item) {
@@ -167,11 +170,20 @@ angular.module('oi.select')
             scroll_bottom = y - height_menu + height_item;
 
             //TODO Make animation
-            if (y + height_item > height_menu + scroll) {
-                list.scrollTop = scroll_bottom;
-            } else if (y < scroll) {
+            if (pos === 'top') {
                 list.scrollTop = scroll_top;
+            } else if (pos === 'bottom') {
+                list.scrollTop = scroll_bottom;
+            } else if (pos === 'middle') {
+                list.scrollTop = scroll_top - ((height_menu / 2) - (height_item / 2));
+            } else {
+                if (y + height_item > height_menu + scroll) {
+                    list.scrollTop = scroll_bottom;
+                } else if (y < scroll) {
+                    list.scrollTop = scroll_top;
+                }
             }
+
         }
     }
 
@@ -292,6 +304,18 @@ angular.module('oi.select')
         return true;
     }
 
+    function objToArr(obj) {
+        var arr = [];
+
+        angular.forEach(obj, function (value, key) {
+            if (key.toString().charAt(0) !== '$') {
+                arr.push(value);
+            }
+        });
+
+        return arr;
+    }
+
     //lodash _.intersection + filter + invert
     function intersection(xArr, yArr, xFilter, yFilter, invert) {
         var i, j, n, filteredX, filteredY, out = invert ? [].concat(xArr) : [];
@@ -327,7 +351,9 @@ angular.module('oi.select')
         bindFocusBlur: bindFocusBlur,
         scrollActiveOption: scrollActiveOption,
         groupsIsEmpty: groupsIsEmpty,
+        objToArr: objToArr,
         getValue: getValue,
-        intersection: intersection
+        intersection: intersection,
+        getOffset: getOffset
     }
 }]);

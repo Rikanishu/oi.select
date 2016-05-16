@@ -22,7 +22,7 @@ angular.module('oi.select')
             label = label.toString();
             query = oiSelectEscape(query);
 
-            html = label.replace(new RegExp(query, 'gi'), '<strong>$&</strong>');
+            html = label.replace(new RegExp(query, 'gi'), '<strong class="current-active-label">$&</strong>');
         } else {
             html = label;
         }
