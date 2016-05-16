@@ -11,6 +11,7 @@ angular.module('oi.select')
             editItem:       false,
             newItem:        false,
             closeList:      true,
+            appendToBody:   false,
             saveTrigger:    'enter tab blur'
         },
         version: {
@@ -81,10 +82,11 @@ angular.module('oi.select')
      * @param {element} inner input element
      * @returns {function} deregistration function for listeners.
      */
-    function bindFocusBlur(element, inputElement) {
+    function bindFocusBlur(element, inputElement, listElement) {
         var isFocused, isMousedown, isBlur;
 
         $document[0].addEventListener('click', clickHandler, true);
+        listElement[0].addEventListener('mousedown', mousedownHandler, true);
         element[0].addEventListener('mousedown', mousedownHandler, true);
         element[0].addEventListener('blur', blurHandler, true);
         inputElement.on('focus', focusHandler);
@@ -140,21 +142,23 @@ angular.module('oi.select')
         }
 
         return function () {
-            $document[0].removeEventListener('click', clickHandler, true);
+            $document[0].removeEventListener('click', clickHandler);
+            listElement[0].removeEventListener('mousedown', mousedownHandler);
             element[0].removeEventListener('mousedown', mousedownHandler, true);
             element[0].removeEventListener('blur', blurHandler, true);
             inputElement.off('focus', focusHandler);
         }
     }
 
-    /**
-     * Sets the selected item in the dropdown menu
-     * of available options.
-     *
-     * @param {object} list
-     * @param {object} item
-     */
-    function scrollActiveOption(list, item) {
+        /**
+         * Sets the selected item in the dropdown menu
+         * of available options.
+         *
+         * @param {object} list
+         * @param {object} item
+         * @param pos
+         */
+    function scrollActiveOption(list, item, pos) {
         var y, height_menu, height_item, scroll, scroll_top, scroll_bottom;
 
         if (item) {
@@ -166,11 +170,20 @@ angular.module('oi.select')
             scroll_bottom = y - height_menu + height_item;
 
             //TODO Make animation
-            if (y + height_item > height_menu + scroll) {
-                list.scrollTop = scroll_bottom;
-            } else if (y < scroll) {
+            if (pos === 'top') {
                 list.scrollTop = scroll_top;
+            } else if (pos === 'bottom') {
+                list.scrollTop = scroll_bottom;
+            } else if (pos === 'middle') {
+                list.scrollTop = scroll_top - ((height_menu / 2) - (height_item / 2));
+            } else {
+                if (y + height_item > height_menu + scroll) {
+                    list.scrollTop = scroll_bottom;
+                } else if (y < scroll) {
+                    list.scrollTop = scroll_top;
+                }
             }
+
         }
     }
 
@@ -340,6 +353,7 @@ angular.module('oi.select')
         groupsIsEmpty: groupsIsEmpty,
         objToArr: objToArr,
         getValue: getValue,
-        intersection: intersection
+        intersection: intersection,
+        getOffset: getOffset
     }
 }]);
