@@ -13,6 +13,7 @@ angular.module('oi.select')
             newItem:        false,
             closeList:      true,
             saveTrigger:    'enter tab blur',
+            appendToBody:   false,
             minlength:      0
         },
         version: {
@@ -83,10 +84,11 @@ angular.module('oi.select')
      * @param {element} inner input element
      * @returns {function} deregistration function for listeners.
      */
-    function bindFocusBlur(element, inputElement) {
+    function bindFocusBlur(element, inputElement, listElement) {
         var isFocused, isMousedown, isBlur;
 
         $document[0].addEventListener('click', clickHandler, true);
+        listElement[0].addEventListener('mousedown', mousedownHandler, true);
         element[0].addEventListener('mousedown', mousedownHandler, true);
         element[0].addEventListener('blur', blurHandler, true);
         inputElement.on('focus', focusHandler);
@@ -149,14 +151,15 @@ angular.module('oi.select')
         }
     }
 
-    /**
-     * Sets the selected item in the dropdown menu
-     * of available options.
-     *
-     * @param {object} list
-     * @param {object} item
-     */
-    function scrollActiveOption(list, item) {
+        /**
+         * Sets the selected item in the dropdown menu
+         * of available options.
+         *
+         * @param {object} list
+         * @param {object} item
+         * @param pos
+         */
+    function scrollActiveOption(list, item, pos) {
         var y, height_menu, height_item, scroll, scroll_top, scroll_bottom;
 
         if (item) {
@@ -168,11 +171,20 @@ angular.module('oi.select')
             scroll_bottom = y - height_menu + height_item;
 
             //TODO Make animation
-            if (y + height_item > height_menu + scroll) {
-                list.scrollTop = scroll_bottom;
-            } else if (y < scroll) {
+            if (pos === 'top') {
                 list.scrollTop = scroll_top;
+            } else if (pos === 'bottom') {
+                list.scrollTop = scroll_bottom;
+            } else if (pos === 'middle') {
+                list.scrollTop = scroll_top - ((height_menu / 2) - (height_item / 2));
+            } else {
+                if (y + height_item > height_menu + scroll) {
+                    list.scrollTop = scroll_bottom;
+                } else if (y < scroll) {
+                    list.scrollTop = scroll_top;
+                }
             }
+
         }
     }
 
@@ -293,6 +305,18 @@ angular.module('oi.select')
         return true;
     }
 
+    function objToArr(obj) {
+        var arr = [];
+
+        angular.forEach(obj, function (value, key) {
+            if (key.toString().charAt(0) !== '$') {
+                arr.push(value);
+            }
+        });
+
+        return arr;
+    }
+
     //lodash _.intersection + filter + invert
     function intersection(xArr, yArr, xFilter, yFilter, invert) {
         var i, j, n, filteredX, filteredY, out = invert ? [].concat(xArr) : [];
@@ -328,8 +352,10 @@ angular.module('oi.select')
         bindFocusBlur: bindFocusBlur,
         scrollActiveOption: scrollActiveOption,
         groupsIsEmpty: groupsIsEmpty,
+        objToArr: objToArr,
         getValue: getValue,
-        intersection: intersection
+        intersection: intersection,
+        getOffset: getOffset
     }
 }]);
 
@@ -415,6 +441,22 @@ angular.module('oi.select')
                     editItemIsCorrected = editItem === 'correct',
                     waitTime            = 0;
 
+                var isAutocompleteOnly = options.autocompleteOnly;
+                var isAppendToBody = options.appendToBody;
+                var isFixedDropdownWidth = options.fixedDropdownWidth;
+                var isScrollToActiveElement = options.scrollToActiveElement;
+                var dropdownContainer = $('body').find('.oi-select-dropdown-container');
+                if (!dropdownContainer.length) {
+                    dropdownContainer = $('<div>').addClass('oi-select-dropdown-container').appendTo('body')
+                }
+
+                scope.autocompleteOnly = isAutocompleteOnly;
+
+                if (isAppendToBody) {
+                    listElement.appendTo(dropdownContainer);
+                    recalculateDropdownPosition();
+                }
+
                 if (editItem === true || editItem === 'correct') {
                     editItem = 'oiSelectEditItem';
                 }
@@ -450,7 +492,7 @@ angular.module('oi.select')
                     element.addClass('cleanMode');
                 }
 
-                var unbindFocusBlur = oiUtils.bindFocusBlur(element, inputElement);
+                var unbindFocusBlur = oiUtils.bindFocusBlur(element, inputElement, listElement);
 
                 if (angular.isDefined(attrs.autofocus)) {
                     $timeout(function() {
@@ -547,6 +589,9 @@ angular.module('oi.select')
 
                         if (inputValue) {
                             getMatches(inputValue);
+                            if (isScrollToActiveElement) {
+                                $timeout(scrollToActiveElement);
+                            }
                             scope.oldQuery = null;
                         } else if (multiple) {
                             resetMatches();
@@ -557,6 +602,7 @@ angular.module('oi.select')
                 });
 
                 scope.$watch('groups', function(groups) {
+
                     if (oiUtils.groupsIsEmpty(groups)) {
                         scope.isOpen = false;
 
@@ -575,7 +621,15 @@ angular.module('oi.select')
                 scope.$watch('isOpen', function(isOpen) {
                     $animate[isOpen ? 'addClass' : 'removeClass'](element, 'open', !isOldAngular && {
                         tempClasses: 'open-animate'
+                    }).then(function() {
+                        if (isScrollToActiveElement) {
+                            $timeout(scrollToActiveElement);
+                        }
                     });
+
+                    if (isAppendToBody) {
+                        recalculateDropdownPosition();
+                    }
                 });
 
                 scope.$watch('isEmptyList', function(isEmptyList) {
@@ -695,7 +749,9 @@ angular.module('oi.select')
                             setOption(listElement, scope.selectorPosition === bottom ? top : scope.selectorPosition + 1);
                             keyUpDownWerePressed = true;
                             if (!scope.query.length && !scope.isOpen) {
-                                getMatches();
+                                if (!isAutocompleteOnly) {
+                                    getMatches();
+                                }
                             }
                             if (scope.inputHide) {
                                 cleanInput();
@@ -778,9 +834,6 @@ angular.module('oi.select')
                 resetMatches();
 
                 element[0].addEventListener('click', click, true); //triggered before add or delete item event
-                scope.$on('$destroy', function() {
-                  element[0].removeEventListener('click', click, true);
-                });
                 element.on('focus', focus);
                 element.on('blur', blur);
 
@@ -823,7 +876,9 @@ angular.module('oi.select')
                         resetMatches({query: options.editItem && !editItemIsCorrected});
                         scope.$evalAsync();
                     } else {
-                        getMatches(scope.query);
+                        if (!isAutocompleteOnly) {
+                            getMatches(scope.query);
+                        }
                     }
                 }
 
@@ -1081,6 +1136,52 @@ angular.module('oi.select')
 
                     return optionGroups;
                 }
+
+                function getOffsetFromBody(element) {
+                    var top = 0, left = 0;
+                    do {
+                        top += element.offsetTop  || 0;
+                        left += element.offsetLeft || 0;
+                        element = element.offsetParent;
+                    } while(element);
+
+                    return {
+                        top: top,
+                        left: left
+                    };
+                }
+
+                function recalculateDropdownPosition() {
+                    //var inputPos = getOffsetFromBody(inputElement.get(0));
+                    var selectSearch =  inputElement.closest('oi-select');
+                    var selectSearchPos = oiUtils.getOffset(selectSearch.get(0));
+                    var selectSearchHeight = selectSearch.outerHeight();
+                    var selectSearchWidth = selectSearch.outerWidth();
+
+                    var offsets = {
+                        'top': 0,
+                        'left': 0
+                    };
+
+                    listElement.css({
+                        'top': selectSearchPos.top + selectSearchHeight + offsets.top,
+                        'left': selectSearchPos.left + offsets.left,
+                        'min-width': selectSearchWidth
+                    });
+
+                    if(isFixedDropdownWidth) {
+                        listElement.css({
+                            'width': selectSearchWidth
+                        });
+                    }
+                }
+
+                function scrollToActiveElement() {
+                    var activeElem = listElement.find('.current-active-label').closest('li');
+                    if (activeElem.length) {
+                        oiUtils.scrollActiveOption(listElement.get(0), activeElem.get(0), 'middle');
+                    }
+                }
             }
         }
     }
@@ -1110,7 +1211,7 @@ angular.module('oi.select')
             label = label.toString();
             query = oiSelectEscape(query);
 
-            html = label.replace(new RegExp(query, 'gi'), '<strong>$&</strong>');
+            html = label.replace(new RegExp(query, 'gi'), '<strong class="current-active-label">$&</strong>');
         } else {
             html = label;
         }
@@ -1176,4 +1277,4 @@ angular.module('oi.select')
         return input;
     };
 });
-angular.module("oi.select").run(["$templateCache", function($templateCache) {$templateCache.put("src/template.html","<div class=select-search><ul class=select-search-list><li class=\"btn btn-default btn-xs select-search-list-item select-search-list-item_selection\" ng-hide=listItemHide ng-repeat=\"item in output track by $index\" ng-class=\"{focused: backspaceFocus && $last}\" ng-click=removeItem($index) ng-bind-html=getSearchLabel(item)></li><li class=\"select-search-list-item select-search-list-item_input\" ng-class=\"{\'select-search-list-item_hide\': inputHide}\"><input autocomplete=off ng-model=query ng-keyup=keyUp($event) ng-keydown=keyDown($event)></li><li class=\"select-search-list-item select-search-list-item_loader\" ng-show=showLoader></li></ul></div><div class=select-dropdown ng-show=isOpen><ul ng-if=isOpen class=select-dropdown-optgroup ng-repeat=\"(group, options) in groups\"><div class=select-dropdown-optgroup-header ng-if=\"group && options.length\" ng-bind-html=\"getGroupLabel(group, options)\"></div><li class=select-dropdown-optgroup-option ng-init=\"isDisabled = getDisableWhen(option)\" ng-repeat=\"option in options\" ng-class=\"{\'active\': selectorPosition === groupPos[group] + $index, \'disabled\': isDisabled, \'ungroup\': !group}\" ng-click=\"isDisabled || addItem(option)\" ng-mouseenter=\"setSelection(groupPos[group] + $index)\" ng-bind-html=getDropdownLabel(option)></li></ul></div>");}]);
+angular.module("oi.select").run(["$templateCache", function($templateCache) {$templateCache.put("src/template.html","<div class=select-search ng-class=\"{\'autocomplete-only\': autocompleteOnly}\"><ul class=select-search-list><li class=\"btn btn-default btn-xs select-search-list-item select-search-list-item_selection\" ng-hide=listItemHide ng-repeat=\"item in output track by $index\" ng-class=\"{focused: backspaceFocus && $last}\" ng-click=removeItem($index) ng-bind-html=getSearchLabel(item)></li><li class=\"select-search-list-item select-search-list-item_input\" ng-class=\"{\'select-search-list-item_hide\': inputHide}\"><input autocomplete=off ng-model=query ng-keyup=keyUp($event) ng-keydown=keyDown($event)></li><li class=\"select-search-list-item select-search-list-item_loader\" ng-show=showLoader></li></ul></div><div class=select-dropdown ng-show=isOpen><ul ng-if=isOpen class=select-dropdown-optgroup ng-repeat=\"(group, options) in groups\"><div class=select-dropdown-optgroup-header ng-if=\"group && options.length\" ng-bind-html=\"getGroupLabel(group, options)\"></div><li class=select-dropdown-optgroup-option ng-init=\"isDisabled = getDisableWhen(option)\" ng-repeat=\"option in options\" ng-class=\"{\'active\': selectorPosition === groupPos[group] + $index, \'disabled\': isDisabled, \'ungroup\': !group}\" ng-click=\"isDisabled || addItem(option)\" ng-mouseenter=\"setSelection(groupPos[group] + $index)\" ng-bind-html=getDropdownLabel(option)></li></ul></div>");}]);
